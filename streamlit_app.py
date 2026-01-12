@@ -19,8 +19,8 @@ st.info("💡 엑셀 수치(52.5)와 맞추려면 왼쪽 사이드바에서 온�
 # 3. 환경 설정 사이드바
 with st.sidebar:
     st.header("⚙️ 환경 설정")
-    # 온도에 따른 몰부피 자동 계산
     temp = st.slider("실험실 온도 (°C)", min_value=0.0, max_value=40.0, value=25.0, step=0.1)
+    # 온도 보정된 몰부피 계산
     molar_volume = 22.4 * (273.15 + temp) / 273.15
     st.write(f"현재 온도 몰부피: **{molar_volume:.3f} L/mol**")
 
@@ -50,15 +50,7 @@ mw = row["분자량"]
 density = row["밀도"]
 purity_val = row["순도"] / 100
 
-# ---------------------------------------------------------
-# [수정된 핵심 계산 수식]
-# 1. n(mol) = (PPM * 10^-6 * Air_vol) / Molar_volume
-# 2. Mass(g) = n * MW
-# 3. Vol(mL) = Mass / Density / Purity
-# 4. Vol(uL) = Vol(mL) * 1000
-# 즉, Vol(uL) = (PPM * MW * Air_vol) / (Molar_volume * Density * Purity * 1000)
-# ---------------------------------------------------------
-
+# 계산 로직 (PPM -> uL 변환)
 required_ul = (target_ppm * mw * air_vol) / (molar_volume * density * purity_val * 1000)
 
 # 6. 최종 결과 출력
@@ -66,13 +58,13 @@ st.divider()
 c1, c2 = st.columns([1, 2])
 with c1:
     st.markdown("### 📊 계산 결과")
-    # 결과를 크게 표시
+    # ✅ 핵심 수정: unsafe_allow_html=True (오타 수정 완료)
     st.markdown(f"""
     <div style="background-color:#f0f2f6; padding:20px; border-radius:10px; border-left: 5px solid #ff4b4b;">
         <p style="font-size:16px; margin-bottom:5px;">필요한 <b>{target_chem}</b> 주입량</p>
         <h1 style="color:#ff4b4b; margin-top:0;">{required_ul:.2f} μL</h1>
     </div>
-    """, unsafe_allow_value=True)
+    """, unsafe_allow_html=True)
 
 with c2:
     st.success(f"✅ **실험 가이드:** {temp}°C 환경에서 {air_vol}L의 Air에 **{required_ul:.2f} μL**의 시약을 주입하면 {target_ppm} PPM이 됩니다.")
