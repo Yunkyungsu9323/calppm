@@ -1,87 +1,81 @@
 import streamlit as st
+import pandas as pd
 
-# 1. 페이지 설정 및 디자인
-st.set_page_config(
-    page_title="Gas PPM 계산기",
-    page_icon="🧪",
-    layout="centered"
-)
+# 1. 페이지 설정
+st.set_page_config(page_title="정밀 PPM 계산기", page_icon="🧪", layout="wide")
 
-# 2. 화학 성분 데이터베이스 (분자량, 밀도, 순도)
-chemicals = {
-    "Water (H2O)": {"mw": 18.015, "density": 1.00, "purity": 100.0},
-    "Ethanol": {"mw": 46.07, "density": 0.789, "purity": 95.0},
-    "THF": {"mw": 72.11, "density": 0.89, "purity": 99.5},
-    "Toluene": {"mw": 92.14, "density": 0.87, "purity": 99.5},
-    "n-Hexane": {"mw": 86.18, "density": 0.66, "purity": 95.0}
-}
+# 2. 기본 화학 데이터
+default_data = [
+    {"성분명": "Water", "분자량": 18.015, "밀도": 1.000, "순도": 100.0},
+    {"성분명": "Ethanol", "분자량": 46.070, "밀도": 0.789, "순도": 95.0},
+    {"성분명": "THF", "분자량": 72.110, "밀도": 0.890, "순도": 99.5},
+    {"성분명": "Toluene", "분자량": 92.140, "밀도": 0.870, "순도": 99.5},
+    {"성분명": "n-Hexane", "분자량": 86.180, "밀도": 0.660, "순도": 95.0}
+]
 
-# 3. 메인 화면 타이틀
-st.title("🧪 가스 농도 대비 액체 주입량 계산기")
-st.markdown("""
-실험 시 **먼저 주입한 공기(Air)의 양**을 기준으로, 목표 PPM을 맞추기 위해 필요한 **액체 시약의 부피**를 계산합니다.
-""")
+st.title("🧪 정밀 가스 농도 계산기")
+st.info("💡 엑셀 수치(52.5)와 맞추려면 왼쪽 사이드바에서 온도를 **23.5°C**로 설정해 보세요.")
+
+# 3. 환경 설정 사이드바
+with st.sidebar:
+    st.header("⚙️ 환경 설정")
+    # 온도에 따른 몰부피 자동 계산
+    temp = st.slider("실험실 온도 (°C)", min_value=0.0, max_value=40.0, value=25.0, step=0.1)
+    molar_volume = 22.4 * (273.15 + temp) / 273.15
+    st.write(f"현재 온도 몰부피: **{molar_volume:.3f} L/mol**")
 
 st.divider()
 
-# 4. 사용자 입력 섹션
-st.subheader("1. 실험 조건 입력")
+# 4. 데이터 편집 섹션
+st.subheader("1. 성분 데이터 확인")
+df_raw = pd.DataFrame(default_data)
+edited_df = st.data_editor(df_raw, num_rows="dynamic", use_container_width=True)
 
-# 성분 선택 (클릭 버튼형 셀렉트박스)
-selected_name = st.selectbox("분석할 성분을 선택하세요", list(chemicals.keys()))
-chem = chemicals[selected_name]
+st.divider()
 
-col1, col2 = st.columns(2)
+# 5. 계산 섹션
+st.subheader("2. 주입 조건 입력")
+col1, col2, col3 = st.columns(3)
 
 with col1:
-    # Air 주입량 입력 (사용자 요청: '전체 용량' 대신 'Air 양')
-    air_volume = st.number_input(
-        "공기(Air) 주입량 (L)", 
-        min_value=0.0, 
-        value=12.0, 
-        step=0.1,
-        help="용기에 먼저 채워 넣은 공기의 양을 입력하세요."
-    )
-
+    target_chem = st.selectbox("분석할 성분 선택", edited_df["성분명"].tolist())
 with col2:
-    # 목표 PPM 입력
-    target_ppm = st.number_input(
-        "목표 농도 (PPM)", 
-        min_value=0.0, 
-        value=1000.0, 
-        step=10.0
-    )
+    air_vol = st.number_input("공기(Air) 주입량 (L)", value=12.0, step=0.1)
+with col3:
+    target_ppm = st.number_input("목표 농도 (PPM)", value=1000.0, step=10.0)
 
-# 5. 계산 로직
-# 상수: 25°C, 1기압 기준 기체 몰부피 (24.45 L/mol)
-molar_volume = 24.45 
-purity_decimal = chem['purity'] / 100
+# 선택된 성분의 데이터 가져오기
+row = edited_df[edited_df["성분명"] == target_chem].iloc[0]
+mw = row["분자량"]
+density = row["밀도"]
+purity_val = row["순도"] / 100
 
-# 계산 공식: 
-# 필요한 액체 부피(uL) = (PPM * 분자량 * Air량) / (몰부피 * 밀도 * 순도)
-required_ul = (target_ppm * chem['mw'] * air_volume) / (molar_volume * chem['density'] * purity_decimal)
+# ---------------------------------------------------------
+# [수정된 핵심 계산 수식]
+# 1. n(mol) = (PPM * 10^-6 * Air_vol) / Molar_volume
+# 2. Mass(g) = n * MW
+# 3. Vol(mL) = Mass / Density / Purity
+# 4. Vol(uL) = Vol(mL) * 1000
+# 즉, Vol(uL) = (PPM * MW * Air_vol) / (Molar_volume * Density * Purity * 1000)
+# ---------------------------------------------------------
 
+required_ul = (target_ppm * mw * air_vol) / (molar_volume * density * purity_val * 1000)
+
+# 6. 최종 결과 출력
 st.divider()
+c1, c2 = st.columns([1, 2])
+with c1:
+    st.markdown("### 📊 계산 결과")
+    # 결과를 크게 표시
+    st.markdown(f"""
+    <div style="background-color:#f0f2f6; padding:20px; border-radius:10px; border-left: 5px solid #ff4b4b;">
+        <p style="font-size:16px; margin-bottom:5px;">필요한 <b>{target_chem}</b> 주입량</p>
+        <h1 style="color:#ff4b4b; margin-top:0;">{required_ul:.2f} μL</h1>
+    </div>
+    """, unsafe_allow_value=True)
 
-# 6. 결과 출력 섹션
-st.subheader("2. 계산 결과")
+with c2:
+    st.success(f"✅ **실험 가이드:** {temp}°C 환경에서 {air_vol}L의 Air에 **{required_ul:.2f} μL**의 시약을 주입하면 {target_ppm} PPM이 됩니다.")
 
-# 강조 박스에 결과 표시
-st.success(f"### 필요한 {selected_name} 주입량: **{required_ul:.2f} μL**")
-
-# 상세 요약 정보
-res_col1, res_col2, res_col3 = st.columns(3)
-res_col1.metric("선택 성분", selected_name)
-res_col2.metric("Air 주입량", f"{air_volume} L")
-res_col3.metric("목표 농도", f"{target_ppm} PPM")
-
-# 7. 참고 정보 (수식 및 물리량)
-with st.expander("계산 수식 및 물리량 상세 정보 확인"):
-    st.latex(r"Volume_{liq} (\mu L) = \frac{PPM \times MW \times V_{air}}{V_m \times \rho \times (Purity/100)}")
-    st.write(f"**적용된 물리량:**")
-    st.write(f"- 분자량($MW$): {chem['mw']} g/mol")
-    st.write(f"- 밀도($\\rho$): {chem['density']} g/mL")
-    st.write(f"- 시약 순도: {chem['purity']}%")
-    st.write(f"- 기체 몰부피($V_m$): {molar_volume} L/mol (25°C 기준)")
-
-st.info(f"💡 **실험 팁:** {air_volume}L의 Air가 담긴 용기에 위 시약을 **{required_ul:.2f} 마이크로리터** 주입 후, 시약이 완전히 기화될 때까지 기다리면 {target_ppm} PPM의 혼합 가스가 제조됩니다.")
+with st.expander("사용한 계산 공식 보기"):
+    st.latex(r"V_{liq}(\mu L) = \frac{PPM \times MW(g/mol) \times V_{air}(L)}{V_m(L/mol) \times \rho(g/mL) \times (Purity/100) \times 1000}")
