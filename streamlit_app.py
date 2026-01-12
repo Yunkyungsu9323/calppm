@@ -2,17 +2,20 @@ import streamlit as st
 import pandas as pd
 
 # 1. 페이지 설정
-st.set_page_config(page_title="정밀 PPM 계산기 통합본", page_icon="🧪", layout="wide")
+st.set_page_config(page_title="정밀 PPM 계산기 Safety Pro", page_icon="🧪", layout="wide")
 
-# 2. 세션 상태 초기화 (데이터가 없을 경우 기본값 설정)
-if 'chem_data' not in st.session_state:
-    st.session_state.chem_data = [
-        {"성분명": "Water", "분자량": 18.015, "밀도": 1.000, "순도": 100.0, "GHS": "✅ 안전", "주의사항": "특이사항 없음"},
-        {"성분명": "Ethanol", "분자량": 46.070, "밀도": 0.789, "순도": 95.0, "GHS": "🔥 인화성", "주의사항": "화기 주의"},
-        {"성분명": "THF", "분자량": 72.110, "밀도": 0.890, "순도": 99.5, "GHS": "🔥 인화성, ⚠️ 자극성", "주의사항": "환기 필수"},
-        {"성분명": "Toluene", "분자량": 92.140, "밀도": 0.870, "순도": 99.5, "GHS": "🔥 인화성, 💀 독성", "주의사항": "보호구 착용"},
-        {"성분명": "n-Hexane", "분자량": 86.180, "밀도": 0.660, "순도": 95.0, "GHS": "🔥 인화성, 💀 독성", "주의사항": "흡입 금지"}
-    ]
+# 기본 데이터 정의
+default_list = [
+    {"성분명": "Water", "분자량": 18.015, "밀도": 1.000, "순도": 100.0, "GHS": "✅ 안전", "주의사항": "특이사항 없음"},
+    {"성분명": "Ethanol", "분자량": 46.070, "밀도": 0.789, "순도": 95.0, "GHS": "🔥 인화성", "주의사항": "화기 주의"},
+    {"성분명": "THF", "분자량": 72.110, "밀도": 0.890, "순도": 99.5, "GHS": "🔥 인화성, ⚠️ 자극성", "주의사항": "환기 필수"},
+    {"성분명": "Toluene", "분자량": 92.140, "밀도": 0.870, "순도": 99.5, "GHS": "🔥 인화성, 💀 독성", "주의사항": "보호구 착용"},
+    {"성분명": "n-Hexane", "분자량": 86.180, "밀도": 0.660, "순도": 95.0, "GHS": "🔥 인화성, 💀 독성", "주의사항": "흡입 금지"}
+]
+
+# 2. 세션 상태 초기화 및 데이터 강제 업데이트
+if 'chem_data' not in st.session_state or st.sidebar.button("🔄 데이터 초기화 (리셋)"):
+    st.session_state.chem_data = default_list
 
 st.title("🧪 정밀 가스 농도 계산기 & 안전 가이드")
 
@@ -25,7 +28,7 @@ with st.sidebar:
     st.divider()
     st.info("📍 **도구 사양**\n- 실린지: ~10 μL\n- 피펫: 10~100 μL")
 
-# 4. 데이터 관리 섹션 (추가 및 수정)
+# 4. 데이터 관리 섹션
 st.subheader("1. 성분 데이터 관리")
 col_edit, col_add = st.columns([2, 1])
 
@@ -46,15 +49,15 @@ with col_add:
 
 with col_edit:
     df = pd.DataFrame(st.session_state.chem_data)
-    # KeyError 방지를 위해 컬럼 보장
-    for col in ["GHS", "주의사항"]:
-        if col not in df.columns: df[col] = ""
+    # 컬럼 누락 방지
+    for c in ["GHS", "주의사항"]:
+        if c not in df.columns: df[c] = ""
     edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
     st.session_state.chem_data = edited_df.to_dict('records')
 
 st.divider()
 
-# 5. 계산 조건 입력
+# 5. 주입 조건 및 계산
 st.subheader("2. 주입 조건 및 결과")
 c1, c2, c3 = st.columns(3)
 
@@ -65,7 +68,7 @@ with c2:
 with c3:
     target_ppm = st.number_input("목표 PPM", value=1000.0)
 
-# 선택 데이터 추출
+# 계산 로직
 row = edited_df[edited_df["성분명"] == target_chem].iloc[0]
 req_ul = (target_ppm * row["분자량"] * air_vol) / (molar_volume * row["밀도"] * (row["순도"]/100) * 1000)
 
@@ -86,17 +89,19 @@ with res_c:
         st.success(f"📍 **추천:** 마이크로 피펫 (세팅: **{req_ul:.1f}**)")
 
 with safe_c:
-    ghs_val = row.get("GHS", "정보 없음")
-    note_val = row.get("주의사항", "내용 없음")
-    bg = "#fff3cd" if any(x in str(ghs_val) for x in ["🔥", "💀", "☣️"]) else "#d4edda"
+    # 빈칸일 경우 기본 문구 처리 (핵심 해결책)
+    ghs_display = row["GHS"] if str(row["GHS"]).strip() != "" else "⚠️ GHS 정보를 입력해주세요"
+    note_display = row["주의사항"] if str(row["주의사항"]).strip() != "" else "📝 주의사항을 입력해주세요"
+    
+    bg = "#fff3cd" if any(x in str(ghs_display) for x in ["🔥", "💀", "☣️", "⚠️"]) else "#d4edda"
     
     st.markdown(f"""
     <div style="background-color:{bg}; padding:15px; border-radius:10px; border:1px solid #ffeeba;">
         <p style="margin:0; font-weight:bold;">⚠️ 안전 정보:</p>
-        <p style="font-size:16px; margin:5px 0;">{ghs_val}</p>
+        <p style="font-size:16px; margin:5px 0;">{ghs_display}</p>
         <p style="margin:10px 0 0 0; font-weight:bold;">💡 주의사항:</p>
-        <p style="margin:0;">{note_val}</p>
+        <p style="margin:0;">{note_display}</p>
     </div>
     """, unsafe_allow_html=True)
 
-st.link_button(f"🌐 {target_chem} MSDS 상세 검색", f"https://pubchem.ncbi.nlm.nih.gov/#query={target_chem}")
+st.link_button(f"🌐 {target_chem} MSDS 상세 검색 (외부 링크)", f"https://pubchem.ncbi.nlm.nih.gov/#query={target_chem}")
