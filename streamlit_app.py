@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import math
 
 # 1. 페이지 설정
 st.set_page_config(page_title="정밀 PPM 계산기 Safety Pro+", page_icon="🧪", layout="wide")
@@ -14,7 +15,7 @@ default_list = [
 ]
 
 # 2. 세션 상태 초기화 및 데이터 강제 업데이트
-if 'chem_data' not in st.session_state or st.sidebar.button("🔄 데이터 초기화 (끓는점 정보 반영)"):
+if 'chem_data' not in st.session_state or st.sidebar.button("🔄 데이터 초기화 (신규 기능 반영)"):
     st.session_state.chem_data = default_list
 
 st.title("🧪 정밀 가스 농도 계산기 & 증발 가이드")
@@ -74,23 +75,54 @@ with c3:
 row = edited_df[edited_df["성분명"] == target_chem].iloc[0]
 req_ul = (target_ppm * row["분자량"] * air_vol) / (molar_volume * row["밀도"] * (row["순도"]/100) * 1000)
 
-# 6. 결과 및 안전 정보 표시
-res_c, safe_c = st.columns(2)
+# 6. 결과 및 도구 추천 가이드 (수정된 섹션)
+res_c, tool_c = st.columns(2)
 
 with res_c:
     st.markdown(f"""
     <div style="background-color:#f0f2f6; padding:20px; border-radius:10px; border-left: 5px solid #ff4b4b;">
-        <p style="margin:0;">필요한 <b>{target_chem}</b> 주입량</p>
+        <p style="margin:0;">필요한 <b>{target_chem}</b> 총 주입량</p>
         <h1 style="color:#ff4b4b; margin-top:0;">{req_ul:.2f} μL</h1>
     </div>
     """, unsafe_allow_html=True)
+
+with tool_c:
+    st.markdown("### 🛠️ 추천 도구 및 사용법")
     
     if req_ul <= 10:
         st.warning(f"📍 **추천 도구:** 마이크로 실린지 (10μL)")
+        st.write(f"실린지 눈금을 **{req_ul:.2f}**에 맞춰 1회 주입하세요.")
+    
+    elif req_ul <= 100:
+        st.success(f"📍 **추천 도구:** 마이크로 피펫 (100μL)")
+        st.markdown(f"""
+        <div style="background-color:#e8f4ea; padding:15px; border-radius:10px; border: 1px solid #28a745;">
+            <p style="margin:0; font-weight:bold; color:#1e7e34;">피펫 세팅:</p>
+            <h2 style="margin:5px 0; color:#1e7e34;">{req_ul:.1f} μL × 1회</h2>
+        </div>
+        """, unsafe_allow_html=True)
+        
     else:
-        st.success(f"📍 **추천 도구:** 마이크로 피펫 (세팅 값: **{req_ul:.1f}**)")
+        # 100uL 초과 시 분할 주입 로직
+        num_injections = math.ceil(req_ul / 100) # 주입 횟수 계산
+        vol_per_time = req_ul / num_injections # 회당 주입량 균등 분할
+        
+        st.success(f"📍 **추천 도구:** 마이크로 피펫 (100μL) - 분할 주입")
+        st.markdown(f"""
+        <div style="background-color:#e8f4ea; padding:15px; border-radius:10px; border: 1px solid #28a745;">
+            <p style="margin:0; font-weight:bold; color:#1e7e34;">회당 세팅 값:</p>
+            <h2 style="margin:5px 0; color:#1e7e34;">{vol_per_time:.1f} μL</h2>
+            <p style="margin:0; font-weight:bold; color:#1e7e34;">총 주입 횟수: {num_injections}번</p>
+            <p style="margin:5px 0 0 0; font-size:14px;">(피펫 다이얼을 {vol_per_time:.1f}에 맞추고 {num_injections}번 나누어 주입하세요)</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-with safe_c:
+# 7. 안전 정보 표시
+st.divider()
+st.subheader("⚠️ 물질 안전 및 물리적 특성")
+safe_c1, safe_c2 = st.columns([1, 1])
+
+with safe_c1:
     inhwa_val = str(row["인화성"])
     icon = "🔥 " if "높음" in inhwa_val else "✅ "
     bg_color = "#fff3cd" if "높음" in inhwa_val else "#d4edda"
@@ -101,9 +133,14 @@ with safe_c:
         <p style="margin:5px 0;"><b>끓는점:</b> <span style="color:#007bff; font-weight:bold;">{row["끓는점"]}</span></p>
         <p style="margin:5px 0;"><b>인화성:</b> {icon}{inhwa_val}</p>
         <p style="margin:5px 0;"><b>독성 및 위험성:</b> {row["독성/위험성"]}</p>
-        <hr style="margin:10px 0; border:0; border-top:1px solid #ccc;">
-        <p style="margin:0; font-weight:bold;">💡 특이사항 (증발 및 실험 주의사항)</p>
-        <p style="margin:5px 0; color:#d9534f; font-weight:bold;">{row["특이사항"]}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with safe_c2:
+    st.markdown(f"""
+    <div style="background-color:#f8d7da; padding:15px; border-radius:10px; border:1px solid #f5c6cb;">
+        <p style="margin:0; font-weight:bold; color:#721c24;">💡 특이사항 (주의사항)</p>
+        <p style="margin:5px 0; color:#721c24; font-weight:bold;">{row["특이사항"]}</p>
     </div>
     """, unsafe_allow_html=True)
 
